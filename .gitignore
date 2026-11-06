@@ -1,0 +1,9 @@
+# Dependencies
+node_modules/
+# Local settings and databases
+.env*
+!.env.example
+.next/
+.wrangler/
+.sites-runtime/
+outputs/
