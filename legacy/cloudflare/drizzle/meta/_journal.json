@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793972213718,
+      "tag": "0000_whole_daredevil",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793991327848,
+      "tag": "0001_open_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793992487281,
+      "tag": "0002_quiet_thundra",
+      "breakpoints": true
+    }
+  ]
+}
