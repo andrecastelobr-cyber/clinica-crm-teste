@@ -83,3 +83,26 @@ test('logout revokes the current session and clears browser cookies',async()=>{
  const response=await logout(new Request('https://crm.test/auth/logout',{method:'POST',headers:{origin:'https://crm.test'}}));
  assert.equal(response.status,303);assert.equal(response.cookies.get('crm-access').value,'');assert.equal(response.cookies.get('crm-refresh').value,'');
 });
+
+const {POST:reschedule}=await import('../app/api/appointments/route.ts');
+test('rescheduling validates dates before RPC and only forwards appointment identifiers and times',async()=>{
+ cookies('token');globalThis.fetch=authenticatedFetch(()=>{throw Error('Invalid dates must not reach RPC')});
+ const body={clinic:'c1',id:'a1',start:'2027-01-01T12:00:00Z',end:'2027-01-01T11:00:00Z'};
+ assert.equal((await reschedule(request(body))).status,400);
+ assert.equal((await reschedule(request({...body,end:'2027-01-03T12:00:00Z'}))).status,400);
+ const valid={...body,end:'2027-01-01T12:30:00Z'};
+ globalThis.fetch=authenticatedFetch((url,options)=>{
+  assert.match(url,/\/rpc\/reschedule_appointment$/);
+  assert.deepEqual(JSON.parse(options.body),{p_data:valid});return Response.json({ok:true,id:'a1'});
+ });
+ assert.equal((await reschedule(request({...valid,patient:'forged',professional:'forged',status:'Concluída'}))).status,200);
+});
+test('rescheduling requires authentication, origin and database authorization; conflicts reach the caller',async()=>{
+ const body={clinic:'c1',id:'a1',start:'2027-01-01T12:00:00Z',end:'2027-01-01T12:30:00Z'};
+ cookies(null);assert.equal((await reschedule(request(body))).status,401);
+ cookies('token');assert.equal((await reschedule(request(body,'https://evil.test'))).status,403);
+ globalThis.fetch=authenticatedFetch(()=>Response.json({code:'42501',message:'forbidden'},{status:403}));
+ assert.equal((await reschedule(request(body))).status,403);
+ globalThis.fetch=authenticatedFetch(()=>Response.json({code:'P0001',message:'Este profissional já tem uma consulta nesse horário.'},{status:400}));
+ const response=await reschedule(request(body));assert.equal(response.status,400);assert.match((await response.json()).error,/já tem uma consulta/);
+});

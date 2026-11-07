@@ -42,7 +42,23 @@ begin
   perform public.crm_write('{"action":"appointment","clinic":"crm-test-clinic-one","patient":"crm-test-patient-one","professional":"crm-test-doctor","start":"2027-01-01T12:15:00Z","end":"2027-01-01T12:45:00Z","reason":"Overlap"}');
   raise sqlstate 'XX000' using message='Overlap unexpectedly accepted';
  exception when raise_exception then null;end;
+ -- Requires 202611070001_reschedule_appointment.sql.
+ perform public.reschedule_appointment(jsonb_build_object('clinic','crm-test-clinic-one','id',appointment,'start','2027-01-01T12:15:00Z','end','2027-01-01T12:45:00Z'));
+ if not exists(select 1 from public.appointments where id=appointment and start='2027-01-01T12:15:00Z' and status='Agendada') then raise exception 'Reschedule did not preserve the appointment';end if;
+ perform public.crm_write('{"action":"appointment","clinic":"crm-test-clinic-one","patient":"crm-test-patient-one","professional":"crm-test-doctor","start":"2027-01-01T14:00:00Z","end":"2027-01-01T14:30:00Z","reason":"Reschedule blocker"}');
+ begin
+  perform public.reschedule_appointment(jsonb_build_object('clinic','crm-test-clinic-one','id',appointment,'start','2027-01-01T14:15:00Z','end','2027-01-01T14:45:00Z'));
+  raise sqlstate 'XX000' using message='Reschedule overlap accepted';
+ exception when raise_exception then null;end;
+ begin
+  perform public.reschedule_appointment(jsonb_build_object('clinic','crm-test-clinic-two','id',appointment,'start','2027-01-01T15:00:00Z','end','2027-01-01T15:30:00Z'));
+  raise sqlstate 'XX000' using message='Cross-clinic reschedule accepted';
+ exception when insufficient_privilege then null;end;
  perform public.crm_write(jsonb_build_object('action','status','clinic','crm-test-clinic-one','id',appointment,'status','Cancelada'));
+ begin
+  perform public.reschedule_appointment(jsonb_build_object('clinic','crm-test-clinic-one','id',appointment,'start','2027-01-01T16:00:00Z','end','2027-01-01T16:30:00Z'));
+  raise sqlstate 'XX000' using message='Cancelled reschedule accepted';
+ exception when raise_exception then null;end;
  perform public.crm_write('{"action":"appointment","clinic":"crm-test-clinic-one","patient":"crm-test-patient-one","professional":"crm-test-doctor","start":"2027-01-01T12:00:00Z","end":"2027-01-01T12:30:00Z","reason":"Replacement"}');
  begin
   perform public.crm_write(jsonb_build_object('action','status','clinic','crm-test-clinic-one','id',appointment,'status','Agendada'));

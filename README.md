@@ -86,3 +86,9 @@ npm run test:legacy
 Referências: [Supabase Auth](https://supabase.com/docs/guides/auth), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [funções de banco](https://supabase.com/docs/guides/database/functions), [backups](https://supabase.com/docs/guides/platform/backups), [regiões Vercel](https://vercel.com/docs/regions).
 
 Validação desta adaptação: compilação Next.js e TypeScript aprovados; 20 testes Node (com Supabase simulado) e 17 testes históricos SQLite aprovados. O script SQL de integração foi preparado, mas ainda não executado por falta de um PostgreSQL/Supabase configurado. `npm run check:env` confirma que as duas variáveis Supabase ainda estão ausentes.
+
+## Alterar horário de consulta (07/11/2026)
+
+Depois da migração inicial, aplique `supabase/migrations/202611070001_reschedule_appointment.sql` no SQL Editor do mesmo projeto Supabase. O arquivo adiciona a operação sem recriar tabelas ou apagar consultas. Aplique antes de publicar a nova interface. O teste `supabase/tests/access-and-payments.sql` agora requer ambas as migrações.
+
+Na aba Agenda, clique na consulta e em **Alterar horário**. Informe início e fim em horário de Brasília e salve. A agenda passa para a data escolhida. Paciente, profissional e status são preservados; consultas canceladas ou concluídas não são remarcadas. O banco rejeita sobreposição, valida acesso à clínica e registra auditoria.
