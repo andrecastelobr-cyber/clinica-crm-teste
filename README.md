@@ -70,7 +70,7 @@ A aplicação não depende da lista de visitantes do Sites. O acesso aos dados d
 
 O diretório `legacy/cloudflare` preserva fonte e migrações do protótipo anterior. O banco SQLite e seus backups permanecem em `.wrangler` e `.sites-runtime`, fora do Git. A migração de dados antigos é um trabalho separado: exige exportação, vínculo dos antigos proprietários aos novos usuários Supabase e validação, sem substituir o banco original.
 
-Antes de inserir dados reais, valide permissões, requisitos de prontuário/privacidade, monitoramento e restauração de backups. Região no Brasil não representa certificação de conformidade. Configure a retenção/recuperação conforme a operação. Backups do banco Supabase não incluem os arquivos do Storage; anexos, quando implementados, precisam de estratégia própria.
+Antes de inserir dados reais, valide permissões, requisitos de prontuário/privacidade, monitoramento e restauração de backups. Região no Brasil não representa certificação de conformidade. Configure a retenção/recuperação conforme a operação. Backups do banco Supabase não incluem os arquivos do Storage; as fotos de pacientes precisam de estratégia própria.
 
 ## Verificações
 
@@ -92,3 +92,13 @@ Validação desta adaptação: compilação Next.js e TypeScript aprovados; 20 t
 Depois da migração inicial, aplique `supabase/migrations/202611070001_reschedule_appointment.sql` no SQL Editor do mesmo projeto Supabase. O arquivo adiciona a operação sem recriar tabelas ou apagar consultas. Aplique antes de publicar a nova interface. O teste `supabase/tests/access-and-payments.sql` agora requer ambas as migrações.
 
 Na aba Agenda, clique na consulta e em **Alterar horário**. Informe início e fim em horário de Brasília e salve. A agenda passa para a data escolhida. Paciente, profissional e status são preservados; consultas canceladas ou concluídas não são remarcadas. O banco rejeita sobreposição, valida acesso à clínica e registra auditoria.
+
+## Foto do paciente pela câmera (07/11/2026)
+
+Aplique `supabase/migrations/202611070002_patient_photos.sql` no SQL Editor do mesmo Supabase usado pelo CRM. A migração cria o bucket **privado** `patient-photos` e políticas de leitura, inserção e substituição limitadas ao vínculo na clínica e à existência do paciente. Não há URL pública nem chave service_role. Não torne o bucket público. O arquivo usa INSERT ON CONFLICT e recria apenas as políticas nomeadas desta funcionalidade, sem apagar pacientes ou imagens.
+
+Em **Pacientes → Novo paciente → Abrir câmera**, autorize a câmera, clique **Tirar foto**, confira a prévia e salve o cadastro. A foto é opcional. Para um paciente existente, clique **Foto**, capture a nova imagem e **Salvar foto**. Descartar a prévia não remove a foto já salva. Se a gravação da foto falhar depois de criar o paciente, o cadastro é preservado e a tela informa como tentar a foto novamente, evitando duplicar o paciente.
+
+Requer HTTPS (ou localhost), webcam disponível e permissão do navegador. Apenas vídeo é solicitado, sem microfone. O cabeçalho Permissions-Policy permite câmera na própria origem. O vídeo é interrompido ao capturar, fechar a câmera ou desmontar o formulário. A captura é JPEG com lado máximo de 640 pixels e limite de 512 KB; o servidor valida tipo, tamanho e assinatura básica. Fotos aparecem na lista de pacientes; ausência/falha mostra as iniciais. Todos os papéis vinculados à clínica, inclusive recepção, podem consultar/substituir a foto cadastral.
+
+O teste SQL de acesso agora requer as três migrações e inclui permissões de fotos e tentativas entre clínicas. Os testes HTTP usam Supabase simulado; não substituem teste de webcam, upload real e isolamento com duas contas no Supabase. Arquivos do Storage precisam de backup próprio; backups somente do PostgreSQL não incluem o conteúdo das imagens.

@@ -106,3 +106,36 @@ test('rescheduling requires authentication, origin and database authorization; c
  globalThis.fetch=authenticatedFetch(()=>Response.json({code:'P0001',message:'Este profissional já tem uma consulta nesse horário.'},{status:400}));
  const response=await reschedule(request(body));assert.equal(response.status,400);assert.match((await response.json()).error,/já tem uma consulta/);
 });
+
+const {GET:readPhoto,POST:savePhoto}=await import('../app/api/patient-photo/route.ts');
+const photoUrl='https://crm.test/api/patient-photo?clinic=c1&patient=p1';
+const jpeg=new Uint8Array([255,216,255,224,0,2,255,217]);
+function photoRequest(body=jpeg,headers={}){return new Request(photoUrl,{method:'POST',headers:{origin:'https://crm.test','Content-Type':'image/jpeg',...headers},body})}
+test('patient photos require authentication, matching origin and bounded JPEG input',async()=>{
+ cookies(null);assert.equal((await readPhoto(new Request(photoUrl))).status,401);
+ cookies('token');globalThis.fetch=authenticatedFetch(()=>{throw Error('Invalid input must not reach Storage')});
+ assert.equal((await savePhoto(photoRequest(jpeg,{origin:'https://evil.test'}))).status,403);
+ assert.equal((await savePhoto(photoRequest('hello',{'Content-Type':'image/png'}))).status,400);
+ assert.equal((await savePhoto(photoRequest(new Uint8Array(512*1024+1)))).status,413);
+ assert.equal((await savePhoto(photoRequest(new Uint8Array([1,2,3,4])))).status,400);
+ assert.equal((await readPhoto(new Request('https://crm.test/api/patient-photo?clinic=../other&patient=p1'))).status,400);
+});
+test('photo uploads and reads use user credentials and a private patient-specific object',async()=>{
+ cookies('token');globalThis.fetch=authenticatedFetch((url,options)=>{
+  assert.equal(url,'https://test.supabase.co/storage/v1/object/patient-photos/c1/p1.jpg');
+  assert.equal(options.method,'POST');assert.equal(options.headers.Authorization,'Bearer token');assert.equal(options.headers['x-upsert'],'true');
+  assert.deepEqual(new Uint8Array(options.body),jpeg);return Response.json({Key:'c1/p1.jpg'});
+ });
+ assert.equal((await savePhoto(photoRequest())).status,200);
+ globalThis.fetch=authenticatedFetch((url,options)=>{
+  assert.equal(url,'https://test.supabase.co/storage/v1/object/authenticated/patient-photos/c1/p1.jpg');assert.equal(options.headers.Authorization,'Bearer token');return new Response(jpeg);
+ });
+ const image=await readPhoto(new Request(photoUrl));assert.equal(image.status,200);assert.equal(image.headers.get('Content-Type'),'image/jpeg');assert.match(image.headers.get('Cache-Control'),/no-store/);assert.deepEqual(new Uint8Array(await image.arrayBuffer()),jpeg);
+});
+test('photo authorization failures are not reported as successful saves or public images',async()=>{
+ cookies('token');globalThis.fetch=authenticatedFetch(()=>Response.json({message:'forbidden'},{status:403}));
+ assert.equal((await savePhoto(photoRequest())).status,403);
+ const result=await readPhoto(new Request(photoUrl));assert.equal(result.status,404);assert.match(result.headers.get('Cache-Control'),/no-store/);
+ globalThis.fetch=authenticatedFetch(()=>Response.json({message:'Bucket not found'},{status:400}));
+ assert.equal((await savePhoto(photoRequest())).status,503);
+});

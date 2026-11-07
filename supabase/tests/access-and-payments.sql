@@ -20,6 +20,19 @@ set local role authenticated;
 do $$
 declare result jsonb;charge text;inst text;appointment text;ignored jsonb;
 begin
+ -- Requires the patient-photos migration as well. These checks exercise metadata RLS;
+ -- actual Storage upload/download must also be checked against a test project.
+ if not private.patient_photo_access('crm-test-clinic-one/crm-test-patient-one.jpg') then raise exception 'Owner photo access denied';end if;
+ if private.patient_photo_access('crm-test-clinic-two/crm-test-patient-two.jpg') or private.patient_photo_access('crm-test-clinic-one/crm-test-patient-two.jpg') or private.patient_photo_access('crm-test-clinic-one/../crm-test-patient-one.jpg') then raise exception 'Photo access leaked';end if;
+ insert into storage.objects(bucket_id,name) values('patient-photos','crm-test-clinic-one/crm-test-patient-one.jpg');
+ begin
+  insert into storage.objects(bucket_id,name) values('patient-photos','crm-test-clinic-two/crm-test-patient-two.jpg');
+  raise sqlstate 'XX000' using message='Cross-clinic photo insertion accepted';
+ exception when insufficient_privilege then null;end;
+ begin
+  update storage.objects set name='crm-test-clinic-two/crm-test-patient-two.jpg' where bucket_id='patient-photos' and name='crm-test-clinic-one/crm-test-patient-one.jpg';
+  raise sqlstate 'XX000' using message='Cross-clinic photo move accepted';
+ exception when insufficient_privilege then null;end;
  if exists(select 1 from public.clinics where id='crm-test-clinic-two') then raise exception 'RLS leaked another clinic';end if;
  begin
   perform public.crm_read('crm-test-clinic-two');
@@ -94,6 +107,7 @@ select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000003'
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 set local role authenticated;
 do $$begin
+ if not private.patient_photo_access('crm-test-clinic-one/crm-test-patient-one.jpg') then raise exception 'Reception cannot access registration photo';end if;
  begin
   perform public.crm_read('crm-test-clinic-one','crm-test-patient-one');
   raise sqlstate 'XX000' using message='Reception read clinical notes';
